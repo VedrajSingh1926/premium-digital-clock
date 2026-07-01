@@ -1,71 +1,47 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BsClock, BsPalette, BsGrid1X2 } from "react-icons/bs";
 
 // -------------------------------------------------------------
-// Global CSS Injection
+// Helper: SVG Tendrils Background
 // -------------------------------------------------------------
-const GLOBAL_STYLES = `
-  html, body {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    overflow: hidden;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: #e2e8f0;
-  }
-  
-  *, *::before, *::after {
-    box-sizing: inherit;
-  }
-
-  .ambient-blob {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(100px);
-    opacity: 0.4;
-    z-index: 0;
-    animation: drift 20s infinite alternate ease-in-out;
-    transition: background 1.5s ease;
-  }
-
-  @keyframes drift {
-    0% { transform: translate(0, 0) scale(1); }
-    100% { transform: translate(60px, 60px) scale(1.15); }
-  }
-
-  .floating-footer {
-    animation: float-breathe 4s infinite ease-in-out alternate;
-  }
-
-  @keyframes float-breathe {
-    0% { transform: translateY(0px); opacity: 0.7; }
-    100% { transform: translateY(-8px); opacity: 1; }
-  }
-    
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-`;
-
-// -------------------------------------------------------------
-// Helper: Number to Words (for Text Clock Theme)
-// -------------------------------------------------------------
-const numWords = [
-  "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-  "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen",
-];
-const tensWords = ["", "", "Twenty", "Thirty", "Forty", "Fifty"];
-
-function convertToWords(num) {
-  if (num < 20) return numWords[num];
-  const digit = num % 10;
-  return tensWords[Math.floor(num / 10)] + (digit ? " " + numWords[digit] : "");
-}
+const EnergyTendrils = ({ activeColor }) => (
+  <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 0 }}>
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+        <feMerge>
+          <feMergeNode in="coloredBlur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+    <motion.path
+      d="M 200 400 Q 400 300 600 500 T 1000 400"
+      fill="transparent"
+      stroke={activeColor}
+      strokeWidth="2"
+      filter="url(#glow)"
+      initial={{ pathLength: 0, opacity: 0 }}
+      animate={{ pathLength: 1, opacity: 0.3 }}
+      transition={{ duration: 4, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}
+    />
+    <motion.path
+      d="M 300 600 Q 500 700 700 400 T 1200 600"
+      fill="transparent"
+      stroke={activeColor}
+      strokeWidth="1.5"
+      filter="url(#glow)"
+      initial={{ pathLength: 0, opacity: 0 }}
+      animate={{ pathLength: 1, opacity: 0.2 }}
+      transition={{ duration: 5, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: 1 }}
+    />
+  </svg>
+);
 
 // -------------------------------------------------------------
 // Live Time Hook
 // -------------------------------------------------------------
-function useTime(is24h) {
+function useTime() {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -74,7 +50,7 @@ function useTime(is24h) {
   }, []);
 
   const rawHours = time.getHours();
-  const hours = is24h ? rawHours : (rawHours % 12 || 12);
+  const hours = rawHours % 12 || 12;
   const strHours = hours.toString().padStart(2, "0");
   const strMins = time.getMinutes().toString().padStart(2, "0");
   const strSecs = time.getSeconds().toString().padStart(2, "0");
@@ -83,334 +59,221 @@ function useTime(is24h) {
   let greeting = "Good Morning";
   if (rawHours >= 12 && rawHours < 17) greeting = "Good Afternoon";
   else if (rawHours >= 17 && rawHours < 22) greeting = "Good Evening";
-  else if (rawHours >= 22 || rawHours < 5) greeting = "Late Night, Keep Grinding ✨";
+  else if (rawHours >= 22 || rawHours < 5) greeting = "Late Night";
 
   return {
-    raw: time,
     hours: strHours,
     minutes: strMins,
     seconds: strSecs,
-    numHours: hours,
-    numMinutes: time.getMinutes(),
-    numSeconds: time.getSeconds(),
     ampm,
     greeting,
-    day: time.toLocaleDateString(undefined, { weekday: "long" }),
-    date: time.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
+    date: time.toLocaleDateString(undefined, { year: "numeric", month: "long" }),
   };
 }
 
 // -------------------------------------------------------------
-// Sub-Components: Time Renderers
+// Particle System
 // -------------------------------------------------------------
-
-// 1. Digital Clock (Default)
-const DigitalClock = ({ time, accentColor }) => {
-  // Ultra Soft Cinematic Cross-Fade (No clipping wrappers!)
-  const digitVariants = {
-    hidden: { opacity: 0, scale: 0.96, filter: "blur(4px)" },
-    visible: { opacity: 1, scale: 1, filter: "blur(0px)" },
-    exit: { opacity: 0, scale: 1.04, filter: "blur(4px)", position: "absolute" },
-  };
-
-  const AnimatedDigit = ({ char }) => (
-    // Ghost element technique: invisible character dictates layout space, absolute character animates perfectly over it.
-    // Zero overflow hidden! Text shadows glow beautifully!
-    <div style={{ position: "relative", display: "inline-block", width: "1ch", textAlign: "center" }}>
-      <AnimatePresence>
-        <motion.span
-          key={char}
-          variants={digitVariants}
-          initial="hidden"
-          animate="visible"
-          exit="exit"
-          transition={{ duration: 0.4, ease: [0.25, 1, 0.5, 1] }}
-          style={{ position: "absolute", left: 0, top: 0, width: "100%" }}
-        >
-          {char}
-        </motion.span>
-      </AnimatePresence>
-      <span style={{ visibility: "hidden" }}>{char}</span>
-    </div>
-  );
-
-  const Section = ({ val }) => (
-    <div style={{ display: "flex" }}>
-      {val.split("").map((c, i) => <AnimatedDigit key={i} char={c} />)}
-    </div>
-  );
+const Particles = ({ color }) => {
+  const [particles, setParticles] = useState([]);
+  useEffect(() => {
+    const arr = Array.from({ length: 30 }).map((_, i) => ({
+      id: i,
+      left: Math.random() * 100 + "vw",
+      size: Math.random() * 6 + 2 + "px",
+      duration: Math.random() * 10 + 10 + "s",
+      delay: Math.random() * 10 + "s",
+    }));
+    setParticles(arr);
+  }, []);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", fontSize: "7rem", fontWeight: "700", fontFamily: "'Roboto Mono', monospace", color: accentColor, textShadow: `0 0 30px ${accentColor}55, 0 0 60px ${accentColor}22` }}>
-      <Section val={time.hours} />
-      <span style={{ margin: "0 10px", opacity: 0.5, textShadow: "none" }}>:</span>
-      <Section val={time.minutes} />
-      <span style={{ margin: "0 10px", opacity: 0.5, textShadow: "none" }}>:</span>
-      <Section val={time.seconds} />
+    <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0, pointerEvents: "none" }}>
+      {particles.map(p => (
+        <div key={p.id} className="particle" style={{
+          left: p.left,
+          width: p.size,
+          height: p.size,
+          background: color,
+          boxShadow: `0 0 10px ${color}, 0 0 20px ${color}`,
+          animationDuration: p.duration,
+          animationDelay: p.delay,
+        }} />
+      ))}
     </div>
   );
 };
 
-// 2. Analog Clock
-const AnalogClock = ({ time, accentColor }) => {
-  const sRot = (time.numSeconds / 60) * 360;
-  const mRot = (time.numMinutes / 60) * 360 + (time.numSeconds / 60) * 6;
-  const hRot = ((time.numHours % 12) / 12) * 360 + (time.numMinutes / 60) * 30;
-
-  return (
-    <div style={{ position: "relative", width: "250px", height: "250px", borderRadius: "50%", border: `4px solid ${accentColor}44`, background: "rgba(255,255,255,0.02)", boxShadow: `0 0 50px ${accentColor}22, inset 0 0 20px ${accentColor}11`, transition: "all 1s ease" }}>
-      <motion.div style={{ position: "absolute", top: "25%", left: "48%", width: "4%", height: "25%", background: "#fff", borderRadius: "4px", transformOrigin: "bottom center", rotate: hRot }} transition={{ type: "spring", stiffness: 50 }} />
-      <motion.div style={{ position: "absolute", top: "10%", left: "49%", width: "2%", height: "40%", background: "#cbd5e1", borderRadius: "4px", transformOrigin: "bottom center", rotate: mRot }} transition={{ type: "spring", stiffness: 50 }} />
-      <motion.div style={{ position: "absolute", top: "5%", left: "49.5%", width: "1%", height: "45%", background: accentColor, borderRadius: "2px", transformOrigin: "bottom center", rotate: sRot }} transition={{ type: "spring", stiffness: 100 }} />
-      <div style={{ position: "absolute", top: "47%", left: "47%", width: "6%", height: "6%", background: accentColor, borderRadius: "50%", boxShadow: `0 0 10px ${accentColor}` }} />
-    </div>
-  );
-};
-
-// 3. Text Clock
-const TextClock = ({ time, accentColor }) => {
-  const hText = convertToWords(time.numHours);
-  const mText = convertToWords(time.numMinutes);
-  const sText = convertToWords(time.numSeconds);
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", fontSize: "2.5rem", fontWeight: "300", letterSpacing: "2px", textAlign: "center" }}>
-      <motion.div key={hText} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ color: "#fff" }}>{hText} <span style={{ opacity: 0.4, fontSize: "1rem" }}>HOURS</span></motion.div>
-      <motion.div key={mText} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ color: accentColor, textShadow: `0 0 20px ${accentColor}66` }}>{mText} <span style={{ opacity: 0.4, fontSize: "1rem" }}>MINUTES</span></motion.div>
-      <motion.div key={sText} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ color: "#94a3b8" }}>{sText} <span style={{ opacity: 0.4, fontSize: "1rem" }}>SECONDS</span></motion.div>
-    </div>
-  );
-};
-
-// 4. Cyber Clock
-const CyberClock = ({ time, accentColor }) => {
-  const Block = ({ val }) => (
-    <div style={{ background: `${accentColor}11`, border: `2px solid ${accentColor}`, padding: "10px 20px", borderRadius: "8px", margin: "0 10px", color: accentColor, fontFamily: "'Courier New', monospace", fontSize: "5rem", fontWeight: "bold", textShadow: `2px 2px 0px rgba(0,0,0,0.5)`, position: "relative", transition: "all 1s ease" }}>
-      {val}
-      <div style={{ position: "absolute", top: 0, left: 0, width: "10px", height: "10px", background: accentColor, transition: "background 1s ease" }} />
-      <div style={{ position: "absolute", bottom: 0, right: 0, width: "10px", height: "10px", background: accentColor, transition: "background 1s ease" }} />
-    </div>
-  );
-  return (
-    <div style={{ display: "flex", alignItems: "center" }}>
-      <Block val={time.hours} />
-      <span style={{ fontSize: "2rem", color: accentColor, transition: "color 1s ease" }}>//</span>
-      <Block val={time.minutes} />
-      <span style={{ fontSize: "2rem", color: accentColor, transition: "color 1s ease" }}>//</span>
-      <Block val={time.seconds} />
-    </div>
-  );
-};
-
-// 5. Vertical Clock
-const VerticalClock = ({ time, accentColor }) => {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", fontSize: "5rem", fontWeight: "800", lineHeight: "1.1", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ color: "#fff" }}>{time.hours}</div>
-      <div style={{ color: accentColor, textShadow: `0 0 30px ${accentColor}88`, transition: "all 1s ease" }}>{time.minutes}</div>
-      <div style={{ color: "#475569", fontSize: "4rem" }}>{time.seconds}</div>
-    </div>
-  );
-};
 
 // -------------------------------------------------------------
 // Main Application Component
 // -------------------------------------------------------------
 export default function App() {
-  const [is24h, setIs24h] = useState(false);
-  const [clockTheme, setClockTheme] = useState("digital");
-  
-  // Master Accent Palette
-  const colors = [
-    { name: "Cyan", value: "#22d3ee", base: "#083344" },
-    { name: "Emerald", value: "#10b981", base: "#064e3b" },
-    { name: "Pink", value: "#ec4899", base: "#500724" },
-    { name: "Gold", value: "#f59e0b", base: "#451a03" },
-    { name: "Purple", value: "#a855f7", base: "#3b0764" },
-  ];
-  
-  const [activeColorObj, setActiveColorObj] = useState(colors[0]);
-  const accentColor = activeColorObj.value;
-
-  const time = useTime(is24h);
+  const time = useTime();
 
   const themes = [
-    { id: "digital", label: "Neon Digital" },
-    { id: "analog", label: "Classic Analog" },
-    { id: "text", label: "Fluid Text" },
-    { id: "cyber", label: "Cyberpunk Block" },
-    { id: "vertical", label: "Vertical Stack" },
+    { id: "neon", label: "Neon Digital", color: "#06b6d4", shape: "30% 70% 50% 50% / 50% 40% 60% 50%" },
+    { id: "purple", label: "Purple", color: "#d946ef", shape: "60% 40% 70% 30% / 40% 60% 40% 60%" },
+    { id: "cyan", label: "Cyan", color: "#0ea5e9", shape: "40% 60% 30% 70% / 60% 30% 70% 40%" },
+    { id: "blue", label: "Blue", color: "#3b82f6", shape: "50% 50% 40% 60% / 30% 70% 50% 50%" },
+    { id: "light", label: "Light", color: "#f59e0b", shape: "70% 30% 50% 50% / 50% 50% 50% 50%" },
   ];
 
-  // Dynamic Background Container (Shifts with theme)
-  const appBgStyle = {
-    display: "flex",
-    width: "100vw",
-    height: "100vh",
-    position: "relative",
-    background: `linear-gradient(135deg, ${activeColorObj.base} 0%, #0f172a 100%)`,
-    transition: "background 1.5s cubic-bezier(0.4, 0, 0.2, 1)",
-    overflow: "hidden",
-  };
+  const colors = [
+    { name: "Emerald", value: "#10b981", shape: "40% 60% 60% 40% / 70% 50% 50% 30%" },
+    { name: "Fartny", value: "#e11d48", shape: "60% 40% 50% 50% / 30% 60% 40% 70%" },
+    { name: "Cyan", value: "#06b6d4", shape: "50% 50% 40% 60% / 50% 40% 60% 50%" },
+    { name: "Dink", value: "#d97706", shape: "30% 70% 70% 30% / 60% 30% 70% 40%" },
+    { name: "Purple", value: "#7e22ce", shape: "70% 30% 40% 60% / 40% 70% 30% 60%" },
+  ];
 
-  const sidePanelStyle = {
-    width: "280px",
-    height: "100%",
-    background: "rgba(255, 255, 255, 0.02)",
-    backdropFilter: "blur(30px)",
-    WebkitBackdropFilter: "blur(30px)",
-    borderRight: "1px solid rgba(255, 255, 255, 0.05)",
-    padding: "40px 20px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "30px",
-    zIndex: 20,
-  };
+  const [activeTheme, setActiveTheme] = useState(themes[0]);
+  const [activeColor, setActiveColor] = useState(colors[2]); // Default Cyan
 
-  const rightPanelStyle = {
-    ...sidePanelStyle,
-    borderRight: "none",
-    borderLeft: "1px solid rgba(255, 255, 255, 0.05)",
-  };
-
-  const centerAreaStyle = {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    zIndex: 10,
-  };
-
-  const cardStyle = {
-    width: "100%",
-    maxWidth: "650px",
-    padding: "60px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    background: "rgba(255, 255, 255, 0.03)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    borderRadius: "40px",
-    border: `1px solid ${accentColor}33`,
-    boxShadow: `0 40px 100px -20px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.1)`,
-    transition: "border 1s ease, box-shadow 1s ease",
+  // Continuous floating animation
+  const floatAnim = {
+    y: ["-15px", "15px"],
+    transition: {
+      duration: 4,
+      repeat: Infinity,
+      repeatType: "reverse",
+      ease: "easeInOut"
+    }
   };
 
   return (
-    <>
-      <style>{GLOBAL_STYLES}</style>
+    <div style={{ width: "100vw", height: "100vh", position: "relative" }} className="text-white">
       
-      <div style={appBgStyle}>
-        {/* Dynamic Ambient Background Blobs matching Accent */}
-        <div className="ambient-blob" style={{ width: "600px", height: "600px", background: `radial-gradient(circle, ${accentColor}44 0%, transparent 70%)`, top: "-10%", left: "-10%" }} />
-        <div className="ambient-blob" style={{ width: "800px", height: "800px", background: `radial-gradient(circle, ${accentColor}22 0%, transparent 70%)`, bottom: "-20%", right: "-10%", animationDelay: "-5s" }} />
+      {/* Background Ambience */}
+      <Particles color={activeColor.value} />
+      <EnergyTendrils activeColor={activeColor.value} />
 
-        {/* LEFT PANEL: Themes */}
-        <div style={sidePanelStyle}>
-          <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 100, damping: 15, delay: 0.1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.9rem", fontWeight: "700", color: "#94a3b8", letterSpacing: "2px", marginBottom: "20px", textTransform: "uppercase" }}>
-              <BsGrid1X2 /> Layout Themes
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {themes.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setClockTheme(t.id)}
-                  style={{
-                    padding: "12px 20px",
-                    textAlign: "left",
-                    background: clockTheme === t.id ? `${accentColor}22` : "transparent",
-                    border: `1px solid ${clockTheme === t.id ? accentColor : "rgba(255,255,255,0.1)"}`,
-                    borderRadius: "12px",
-                    color: clockTheme === t.id ? accentColor : "#cbd5e1",
-                    cursor: "pointer",
-                    transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
-                    fontWeight: clockTheme === t.id ? "600" : "400",
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-
-        {/* CENTER PANEL: Main Dashboard */}
-        <div style={centerAreaStyle}>
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: "spring", stiffness: 100, damping: 12 }}
-            style={cardStyle}
+      {/* LEFT SIDE: Themes */}
+      <div style={{ position: "absolute", left: "5%", top: "15%", display: "flex", flexDirection: "column", gap: "40px", zIndex: 10 }}>
+        {themes.map((t, i) => (
+          <motion.div 
+            key={t.id} 
+            animate={{ y: [-(10 + i*2), 10 + i*2] }} 
+            transition={{ duration: 3 + i*0.5, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+            style={{ display: "flex", alignItems: "center", gap: "20px" }}
           >
-            {/* Header: Greeting & Date */}
-            <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "40px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                <AnimatePresence mode="wait">
-                  <motion.div key={time.greeting} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ type: "spring", stiffness: 100, damping: 10 }} style={{ fontSize: "1.2rem", fontWeight: "600", color: "#f8fafc", textShadow: `0 0 15px ${accentColor}66`, transition: "text-shadow 1s" }}>
-                    {time.greeting}
-                  </motion.div>
-                </AnimatePresence>
-                <div style={{ fontSize: "0.9rem", color: "#94a3b8", letterSpacing: "1px" }}>{time.day}, {time.date}</div>
-              </div>
-              
-              <button
-                onClick={() => setIs24h(!is24h)}
-                style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: `${accentColor}11`, border: `1px solid ${accentColor}55`, borderRadius: "20px", color: accentColor, fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", transition: "all 0.5s ease" }}
-              >
-                <BsClock /> {is24h ? "24H" : "12H"}
-              </button>
+            <div 
+              onClick={() => setActiveTheme(t)}
+              className="resin-pod"
+              style={{
+                width: "80px", 
+                height: "80px", 
+                borderRadius: t.shape,
+                cursor: "pointer",
+                '--pod-glow': activeTheme.id === t.id ? t.color : 'transparent',
+                border: activeTheme.id === t.id ? `2px solid ${t.color}` : '1px solid rgba(255,255,255,0.1)'
+              }}
+            >
+              {/* Internal Filament Simulation */}
+              <div style={{ width: "100%", height: "100%", borderRadius: "inherit", background: `radial-gradient(circle at 30% 30%, ${t.color}88 0%, transparent 60%)`, mixBlendMode: "screen" }} />
             </div>
-
-            {/* Dynamic Clock Theme Container */}
-            <div style={{ minHeight: "250px", display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
-              <AnimatePresence mode="wait">
-                <motion.div key={clockTheme} initial={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }} animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }} exit={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }} transition={{ duration: 0.4 }}>
-                  {clockTheme === "digital" && <DigitalClock time={time} accentColor={accentColor} />}
-                  {clockTheme === "analog" && <AnalogClock time={time} accentColor={accentColor} />}
-                  {clockTheme === "text" && <TextClock time={time} accentColor={accentColor} />}
-                  {clockTheme === "cyber" && <CyberClock time={time} accentColor={accentColor} />}
-                  {clockTheme === "vertical" && <VerticalClock time={time} accentColor={accentColor} />}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* AM/PM Pill */}
-            <AnimatePresence>
-              {!is24h && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} style={{ marginTop: "30px", padding: "6px 20px", background: `${accentColor}22`, border: `1px solid ${accentColor}`, borderRadius: "20px", color: accentColor, fontWeight: "700", letterSpacing: "2px", transition: "all 0.5s ease" }}>
-                  {time.ampm}
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <span style={{ fontFamily: "sans-serif", fontSize: "1.1rem", fontWeight: "300", letterSpacing: "1px", textShadow: activeTheme.id === t.id ? `0 0 10px ${t.color}` : 'none' }}>
+              {t.label}
+            </span>
           </motion.div>
-
-          {/* Premium Breathing Footer */}
-          <div className="floating-footer" style={{ position: "absolute", bottom: "30px", fontSize: "0.85rem", fontWeight: "600", letterSpacing: "3px", textTransform: "uppercase", color: "#cbd5e1" }}>
-            <span style={{ textShadow: `0 0 15px ${accentColor}`, transition: "text-shadow 1.5s ease" }}>Developed by Vedraj Singh</span>
-          </div>
-        </div>
-
-        {/* RIGHT PANEL: Accents */}
-        <div style={rightPanelStyle}>
-          <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 100, damping: 15, delay: 0.2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "0.9rem", fontWeight: "700", color: "#94a3b8", letterSpacing: "2px", marginBottom: "20px", textTransform: "uppercase" }}>
-              <BsPalette /> Accent Colors
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              {colors.map((c) => (
-                <div key={c.value} onClick={() => setActiveColorObj(c)} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", padding: "8px", borderRadius: "8px", background: accentColor === c.value ? "rgba(255,255,255,0.05)" : "transparent", transition: "background 0.3s" }}>
-                  <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: c.value, boxShadow: accentColor === c.value ? `0 0 20px ${c.value}` : "none", border: accentColor === c.value ? "2px solid #fff" : "2px solid transparent", transition: "all 0.3s" }} />
-                  <span style={{ color: accentColor === c.value ? "#fff" : "#94a3b8", fontWeight: "500", fontSize: "0.9rem", transition: "color 0.3s" }}>{c.name}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-
+        ))}
       </div>
-    </>
+
+      {/* CENTER: Quartz Clock Panel */}
+      <div style={{ position: "absolute", left: "50%", top: "45%", transform: "translate(-50%, -50%)", zIndex: 10 }}>
+        <motion.div animate={floatAnim}>
+          <div 
+            className="quartz-panel" 
+            style={{
+              width: "700px", 
+              height: "400px", 
+              display: "flex", 
+              flexDirection: "column", 
+              alignItems: "center", 
+              justifyContent: "center",
+              padding: "40px",
+              '--glow-color': `${activeColor.value}44`
+            }}
+          >
+            {/* Top Metadata */}
+            <div style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "0 40px", marginBottom: "20px" }}>
+              <span style={{ fontSize: "1.2rem", fontWeight: "500", letterSpacing: "2px" }}>{time.greeting}</span>
+              <div style={{ textAlign: "right", fontFamily: "'Roboto Mono', monospace", color: "#cbd5e1" }}>
+                <div>{time.date}</div>
+                <div>12H {time.ampm}</div>
+              </div>
+            </div>
+
+            {/* Glowing Etched Digital Numbers */}
+            <div 
+              className="etched-text"
+              style={{
+                fontSize: "8rem",
+                fontWeight: "700",
+                fontFamily: "'Orbitron', 'Roboto Mono', sans-serif",
+                letterSpacing: "4px",
+                '--glow-color': `${activeColor.value}88`
+              }}
+            >
+              {time.hours}:{time.minutes}:{time.seconds}
+            </div>
+          </div>
+
+          {/* Curved Metal Bracket Footer */}
+          <div 
+            className="metal-bracket"
+            style={{
+              position: "absolute",
+              bottom: "-80px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "500px",
+              height: "60px",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              paddingBottom: "10px",
+              zIndex: -1
+            }}
+          >
+            <span style={{ fontSize: "0.8rem", letterSpacing: "4px", fontWeight: "600", color: "#a3a3a3", textShadow: "0 2px 4px rgba(0,0,0,1)" }}>
+              DEVELOPED BY VEDRAJ SINGH
+            </span>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* RIGHT SIDE: Cascading Color Pods */}
+      <div style={{ position: "absolute", right: "5%", top: "10%", display: "flex", flexDirection: "column", gap: "30px", zIndex: 10 }}>
+        {colors.map((c, i) => (
+          <motion.div 
+            key={c.name} 
+            animate={{ y: [15 + i*3, -(15 + i*3)] }} 
+            transition={{ duration: 4 + i*0.5, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: i * 0.2 }}
+            style={{ display: "flex", alignItems: "center", gap: "20px", flexDirection: "row-reverse" }}
+          >
+            <div 
+              onClick={() => setActiveColor(c)}
+              className="resin-pod"
+              style={{
+                width: "90px", 
+                height: "110px", 
+                borderRadius: c.shape,
+                cursor: "pointer",
+                '--pod-glow': activeColor.name === c.name ? `${c.value}AA` : 'transparent',
+                border: activeColor.name === c.name ? `1px solid ${c.value}` : '1px solid rgba(255,255,255,0.1)'
+              }}
+            >
+              {/* Internal Bloom Light */}
+              <div style={{ width: "100%", height: "100%", borderRadius: "inherit", background: `radial-gradient(circle at 50% 50%, ${c.value}99 0%, transparent 70%)` }} />
+            </div>
+            <span style={{ fontFamily: "sans-serif", fontSize: "1rem", fontWeight: "400", letterSpacing: "1px", color: activeColor.name === c.name ? "#fff" : "#94a3b8" }}>
+              {c.name}
+            </span>
+          </motion.div>
+        ))}
+      </div>
+
+    </div>
   );
 }
